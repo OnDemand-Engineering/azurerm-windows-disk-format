@@ -97,6 +97,8 @@ begin {
 
     $LogPath = "$env:SYSTEMROOT\TEMP\Deployment_" + (Get-Date -Format 'yyyy-MM-dd')
 
+    $textInfo = (Get-Culture).TextInfo
+
     # Set Variables
     $diskConfigArray = @()
     foreach ($item in $diskConfig.split(';')) {
@@ -110,24 +112,34 @@ begin {
 
 process {
     # Dismount any attached ISOs
-    Get-Volume | Where-Object {$_.DriveType -eq "CD-ROM"} | Get-DiskImage | Dismount-DiskImage
+    Get-Volume | Where-Object { $_.DriveType -eq "CD-ROM" } | Get-DiskImage | Dismount-DiskImage
 
     # Initialize and format Data Disks
     [array]$DataDisks = Get-Disk | Where-Object { ($_.IsSystem -eq $false) -and ($_.PartitionStyle -eq 'RAW') } | Sort-Object Number
     if ($DataDisks) {
         foreach ($Disk in $DataDisks) {
             $usedDriveLetters = (Get-Volume).DriveLetter | Sort-Object
-            if ($usedDriveLetters -notcontains $diskConfigArray[[array]::IndexOf($dataDisks, $disk)].driveLetter) {
-                $driveLetter = $diskConfigArray[[array]::IndexOf($dataDisks, $disk)].driveLetter
+            if ([string]::IsNullOrEmpty($diskConfigArray[[array]::IndexOf($dataDisks, $disk)].driveLetter)) {
+                $partitionParams = @{
+                    AssignDriveLetter = $true
+                }
             }
             else {
-                $driveLetter = 'EFGHIJKLMNOPQRSTUVWXY' -replace ("$($diskConfigArray.DriveLetter -join '|')", '') -split '' | Where-Object { $_ -notin (Get-CimInstance -ClassName win32_logicaldisk).DeviceID.Substring(0, 1) } | Where-Object { $_ } | Select-Object -first 1
-                Write-Log -Object "Disk Formatting" -Message "Drive Letter: $($diskConfigArray[[array]::IndexOf($dataDisks, $disk)].driveLetter) in use, using $driveLetter instead" -Severity Information -LogPath $LogPath
+                if ($usedDriveLetters -notcontains $diskConfigArray[[array]::IndexOf($dataDisks, $disk)].driveLetter) {
+                    $driveLetter = $diskConfigArray[[array]::IndexOf($dataDisks, $disk)].driveLetter
+                }
+                else {
+                    $driveLetter = 'EFGHIJKLMNOPQRSTUVWXY' -replace ("$($diskConfigArray.DriveLetter -join '|')", '') -split '' | Where-Object { $_ -notin (Get-CimInstance -ClassName win32_logicaldisk).DeviceID.Substring(0, 1) } | Where-Object { $_ } | Select-Object -first 1
+                    Write-Log -Object "Disk Formatting" -Message "Drive Letter: $($diskConfigArray[[array]::IndexOf($dataDisks, $disk)].driveLetter) in use, using $driveLetter instead" -Severity Information -LogPath $LogPath
+                }
+                $partitionParams= @{
+                    DriveLetter  = $driveLetter
+                }
             }
             $Disk | Initialize-Disk -PartitionStyle GPT
-            $Partition = $Disk | New-Partition -DriveLetter $driveLetter -UseMaximumSize
-            $Partition | Format-Volume -FileSystem NTFS -NewFileSystemLabel $diskConfigArray[[array]::IndexOf($dataDisks, $disk)].volumeLabel
-            Write-Log -Object "Disk Formatting" -Message "Formatted disk:$($Disk.Number) driveLetter:$($driveLetter) volumeLabel:$($diskConfigArray[[array]::IndexOf($dataDisks, $disk)].volumeLabel)" -Severity Information -LogPath $LogPath
+            $Partition = New-Partition -DiskNumber $Disk.Number @partitionParams -UseMaximumSize
+            $Partition | Format-Volume -FileSystem NTFS -NewFileSystemLabel $textInfo.ToTitleCase($diskConfigArray[[array]::IndexOf($dataDisks, $disk)].volumeLabel)
+            Write-Log -Object "Disk Formatting" -Message "Formatted disk:$($Disk.Number) driveLetter:$($Partition.DriveLetter) volumeLabel:$($textInfo.ToTitleCase($diskConfigArray[[array]::IndexOf($dataDisks, $disk)].volumeLabel))" -Severity Information -LogPath $LogPath
         }
     }
 }
