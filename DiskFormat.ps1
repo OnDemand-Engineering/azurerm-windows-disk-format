@@ -99,6 +99,8 @@ begin {
 
     $textInfo = (Get-Culture).TextInfo
 
+    Write-Log -Object "Disk Formatting" -Message "Disk Configs: $diskConfig" -Severity Information -LogPath $LogPath
+
     # Set Variables
     $diskConfigArray = @()
     foreach ($item in $diskConfig.split(';')) {
@@ -109,6 +111,7 @@ begin {
         }
         $diskConfigArray += $myObject
     }
+    Write-Log -Object "Disk Formatting" -Message "Disk Configs: $diskConfigArray" -Severity Information -LogPath $LogPath
 }
 
 process {
@@ -119,21 +122,21 @@ process {
     [array]$dataDisks = Get-Disk | Where-Object { ($_.IsSystem -eq $false) -and ($_.PartitionStyle -eq 'RAW') -and ($_.Location -like "*Adapter 1*") }
     if ($dataDisks) {
         foreach ($disk in $dataDisks) {
-            $diskConfig = $diskConfigArray | Where-Object { $_.lun -eq ($disk.Location -split 'LUN ')[1] }
-            Write-Log -Object "Disk Formatting" -Message "Disk:$($disk.Number), Lun: $($diskConfig.lun) driveLetter:$($diskConfig.driveLetter) volumeLabel:$($textInfo.ToTitleCase($diskConfig.volumeLabel))" -Severity Information -LogPath $LogPath
+            $config = $diskConfigArray | Where-Object { $_.lun -eq ($disk.Location -split 'LUN ')[1] }
+            Write-Log -Object "Disk Formatting" -Message "Disk:$($disk.Number), Lun: $($config.lun) driveLetter:$($config.driveLetter) volumeLabel:$($textInfo.ToTitleCase($config.volumeLabel))" -Severity Information -LogPath $LogPath
             $usedDriveLetters = (Get-Volume).driveLetter | Sort-Object
-            if ([string]::IsNullOrEmpty($diskConfig.driveLetter)) {
+            if ([string]::IsNullOrEmpty($config.driveLetter)) {
                 $partitionParams = @{
                     AssignDriveLetter = $true
                 }
             }
             else {
-                if ($usedDriveLetters -notcontains $diskConfig.driveLetter) {
-                    $driveLetter = $diskConfig.driveLetter
+                if ($usedDriveLetters -notcontains $config.driveLetter) {
+                    $driveLetter = $config.driveLetter
                 }
                 else {
                     $driveLetter = 'EFGHIJKLMNOPQRSTUVWXY' -replace ("$($diskConfigArray.DriveLetter -join '|')", '') -split '' | Where-Object { $_ -notin (Get-CimInstance -ClassName win32_logicaldisk).DeviceID.Substring(0, 1) } | Where-Object { $_ } | Select-Object -first 1
-                    Write-Log -Object "Disk Formatting" -Message "Drive Letter: $($diskConfig.driveLetter) in use, using $driveLetter instead" -Severity Information -LogPath $LogPath
+                    Write-Log -Object "Disk Formatting" -Message "Drive Letter: $($config.driveLetter) in use, using $driveLetter instead" -Severity Information -LogPath $LogPath
                 }
                 $partitionParams = @{
                     DriveLetter = $driveLetter
@@ -141,8 +144,8 @@ process {
             }
             $disk | Initialize-Disk -PartitionStyle GPT
             $partition = New-Partition -DiskNumber $disk.Number @partitionParams -UseMaximumSize
-            $partition | Format-Volume -FileSystem NTFS -NewFileSystemLabel $textInfo.ToTitleCase($diskConfig.volumeLabel)
-            Write-Log -Object "Disk Formatting" -Message "Formatted disk:$($disk.Number) driveLetter:$($partition.DriveLetter) volumeLabel:$($textInfo.ToTitleCase($diskConfig.volumeLabel))" -Severity Information -LogPath $LogPath
+            $partition | Format-Volume -FileSystem NTFS -NewFileSystemLabel $textInfo.ToTitleCase($config.volumeLabel)
+            Write-Log -Object "Disk Formatting" -Message "Formatted disk:$($disk.Number) driveLetter:$($partition.DriveLetter) volumeLabel:$($textInfo.ToTitleCase($config.volumeLabel))" -Severity Information -LogPath $LogPath
         }
     }
 }
