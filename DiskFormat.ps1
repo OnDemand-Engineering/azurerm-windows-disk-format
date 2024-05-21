@@ -116,10 +116,11 @@ process {
     Get-Volume | Where-Object { $_.DriveType -eq "CD-ROM" } | Get-DiskImage | Dismount-DiskImage
 
     # Initialize and format Data Disks
-    [array]$DataDisks = Get-Disk | Where-Object { ($_.IsSystem -eq $false) -and ($_.PartitionStyle -eq 'RAW') -and ($_.Location -like "*Adapter 1*") }
-    if ($DataDisks) {
-        foreach ($Disk in $DataDisks) {
+    [array]$dataDisks = Get-Disk | Where-Object { ($_.IsSystem -eq $false) -and ($_.PartitionStyle -eq 'RAW') -and ($_.Location -like "*Adapter 1*") }
+    if ($dataDisks) {
+        foreach ($disk in $dataDisks) {
             $diskConfig = $diskConfigArray | Where-Object { $_.lun -eq ($disk.Location -split 'LUN ')[1] }
+            Write-Log -Object "Disk Formatting" -Message "Disk:$($disk.Number), Lun: $($diskConfig.lun) driveLetter:$($diskConfig.driveLetter) volumeLabel:$($textInfo.ToTitleCase($diskConfig.volumeLabel))" -Severity Information -LogPath $LogPath
             $usedDriveLetters = (Get-Volume).driveLetter | Sort-Object
             if ([string]::IsNullOrEmpty($diskConfig.driveLetter)) {
                 $partitionParams = @{
