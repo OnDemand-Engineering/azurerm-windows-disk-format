@@ -99,8 +99,6 @@ begin {
 
     $textInfo = (Get-Culture).TextInfo
 
-    Write-Log -Object "Disk Formatting" -Message "Disk Configs: $diskConfig" -Severity Information -LogPath $LogPath
-
     # Set Variables
     $diskConfigArray = @()
     foreach ($item in $diskConfig.split(';')) {
@@ -111,7 +109,6 @@ begin {
         }
         $diskConfigArray += $myObject
     }
-    Write-Log -Object "Disk Formatting" -Message "Disk Configs: $diskConfigArray" -Severity Information -LogPath $LogPath
 }
 
 process {
@@ -123,7 +120,6 @@ process {
     if ($dataDisks) {
         foreach ($disk in $dataDisks) {
             $config = $diskConfigArray | Where-Object { $_.lun -eq ($disk.Location -split 'LUN ')[1] }
-            Write-Log -Object "Disk Formatting" -Message "Disk:$($disk.Number), Lun: $($config.lun) driveLetter:$($config.driveLetter) volumeLabel:$($textInfo.ToTitleCase($config.volumeLabel))" -Severity Information -LogPath $LogPath
             $usedDriveLetters = (Get-Volume).driveLetter | Sort-Object
             if ([string]::IsNullOrEmpty($config.driveLetter)) {
                 $partitionParams = @{
@@ -145,7 +141,7 @@ process {
             $disk | Initialize-Disk -PartitionStyle GPT
             $partition = New-Partition -DiskNumber $disk.Number @partitionParams -UseMaximumSize
             $partition | Format-Volume -FileSystem NTFS -NewFileSystemLabel $textInfo.ToTitleCase($config.volumeLabel)
-            Write-Log -Object "Disk Formatting" -Message "Formatted disk:$($disk.Number) driveLetter:$($partition.DriveLetter) volumeLabel:$($textInfo.ToTitleCase($config.volumeLabel))" -Severity Information -LogPath $LogPath
+            Write-Log -Object "Disk Formatting" -Message "Formatted disk:$($disk.Number) lun:$($config.lun) driveLetter:$($partition.DriveLetter) volumeLabel:$($textInfo.ToTitleCase($config.volumeLabel))" -Severity Information -LogPath $LogPath
         }
     }
 }
