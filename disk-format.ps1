@@ -103,15 +103,22 @@ begin {
     $diskConfigArray = @()
     foreach ($item in $diskConfig.split(';')) {
         $myObject = [PSCustomObject]@{
-            driveLetter = $item.split(',')[0]
-            lun         = $item.split(',')[1]
-            volumeLabel = $item.split(',')[2]
+            driveLetter = $item.split(',')[0].Replace(" ","")
+            lun         = $item.split(',')[1].Replace(" ","")
+            volumeLabel = $item.split(',')[2].Replace(" ","")
         }
         $diskConfigArray += $myObject
     }
 }
 
 process {
+    # Change Optical Drive to Z:
+    $Optical = Get-CimInstance -Class Win32_CDROMDrive | Select-Object -ExpandProperty Drive
+    if (!($null -eq $Optical) -and !($Optical -eq 'Z:')) {
+        Set-CimInstance -InputObject ( Get-CimInstance -Class Win32_volume -Filter "DriveLetter = '$Optical'" ) -Arguments @{DriveLetter = 'Z:' }
+        Write-Log -Object "Disk Formatting" -Message "Set Optical Drive to Z:" -Severity Information -LogPath $LogPath
+    }
+
     # Dismount any attached ISOs
     Get-Volume | Where-Object { $_.DriveType -eq "CD-ROM" } | Get-DiskImage | Dismount-DiskImage
 
